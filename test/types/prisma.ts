@@ -1,5 +1,6 @@
 // `prismaAdapter(prisma.<model>)` infers the row and where types from each generated client, with no
 // explicit type arguments. `pnpm typecheck` needs the clients generated (`pnpm prisma:generate`).
+import { z } from 'zod';
 import { type Adapter, Changeset, repo } from '../../src/index.js';
 import { prismaAdapter } from '../../src/adapters/prisma.js';
 import type { PrismaClient as V6Engine } from '../prisma/v6/generated/v6-engine/client/index.js';
@@ -97,4 +98,12 @@ void v7Client.$transaction(async (tx) => {
     // @ts-expect-error find must return the adapter's where
     find: (id: string) => ({ slug: id })
   });
+}
+
+// castEmbed on a Prisma Json column: any subkeys, with JSON-valued schemas.
+{
+  type Row = RowOf<ReturnType<typeof prismaAdapter<typeof v7Client.project>>>;
+  Changeset.of<Row>(null).castEmbed('settings', { theme: z.string(), digest: z.boolean() }, ['theme', 'digest']);
+  // @ts-expect-error a Date is not a JSON value
+  Changeset.of<Row>(null).castEmbed('settings', { at: z.date() }, ['at']);
 }

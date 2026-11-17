@@ -7,6 +7,7 @@ export {
   type ConstraintDeclaration,
   type ConstraintKind,
   type ConstraintViolation,
+  type Embedded,
   type ErrorKey,
   type Errors,
   type Field,
@@ -25,6 +26,7 @@ export {
   type Adapter,
   type Repo,
   type RepoOptions,
+  STALE_MESSAGE,
   type WriteResult
 } from './repo.js';
 export type { StandardSchemaV1 } from './standard-schema.js';

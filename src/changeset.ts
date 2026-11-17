@@ -112,6 +112,15 @@ function parse<V>(schema: StandardSchemaV1<unknown, V>, value: unknown): Standar
 
 const isBlank = (value: unknown) => typeof value === 'string' && value.trim() === '';
 
+/** The object type inside a JSON column's type, without null. */
+export type Embedded<V> = Extract<NonNullable<V>, object> extends infer E ? (E extends readonly unknown[] ? never : E) : never;
+
+/** `base` extended by an issue's path inside the value: `address.lines.0`. */
+const issueKey = (base: string, issue: StandardSchemaV1.Issue | undefined) => {
+  const path = (issue?.path ?? []).map((segment) => String(typeof segment === 'object' ? segment.key : segment));
+  return [base, ...path].join('.');
+};
+
 export class Changeset<T extends object> {
   private constructor(
     /** The row as stored; null for an insert. */
@@ -211,6 +220,50 @@ export class Changeset<T extends object> {
       else changeset = changeset.addError(key, result.issues[0]?.message ?? 'is invalid', 'invalid');
     }
     return changeset;
+  }
+
+  /**
+   * A JSON column (an address, settings) from the attributes given to `cast`: `attrs[key]` is read as an
+   * object, by the same rules as `cast`, with one schema per subkey. Only the permitted subkeys present
+   * change; the others keep their stored values. An error on a subkey is reported as `key.subkey`. A value
+   * for `key` that isn't an object is an error on `key`. Without a value for `key`, nothing changes.
+   */
+  castEmbed<K extends Field<T>, F extends Fields<Embedded<T[K]>>>(
+    key: K,
+    fields: F,
+    permitted: readonly (keyof F & string)[]
+  ): Changeset<T> {
+    if (!Object.hasOwn(this.params, key) || this.params[key] === undefined) return this;
+    const input = this.params[key];
+    if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+      return this.addError(key, 'is invalid', 'invalid');
+    }
+    const stored = this.getField(key);
+    const next: Record<string, unknown> = isPlainObject(stored) ? { ...stored } : {};
+    let changeset: Changeset<T> = this;
+    for (const subkey of permitted) {
+      const raw = (input as Record<string, unknown>)[subkey];
+      if (!Object.hasOwn(input, subkey) || raw === undefined) continue;
+      const schema = (fields as Record<string, StandardSchemaV1 | undefined>)[subkey];
+      if (!schema) throw new Error(`No field schema for permitted key "${key}.${subkey}"`);
+      const value = isBlank(raw) ? null : raw;
+      const result = parse(schema, value);
+      const errorKey = `${key}.${subkey}` as ErrorKey<T>;
+      if (!result.issues) next[subkey] = result.value;
+      else if (value === null) changeset = changeset.addError(errorKey, "can't be blank", 'required');
+      else changeset = changeset.addError(issueKey(errorKey, result.issues[0]) as ErrorKey<T>, result.issues[0]?.message ?? 'is invalid', 'invalid');
+    }
+    const failed = Object.keys(changeset.errors).some((errorKey) => errorKey.startsWith(`${key}.`));
+    return failed ? changeset : changeset.putChange(key, next as T[K]);
+  }
+
+  /**
+   * A check on the changeset as a whole, changed or not: for a rule across columns, or a delete's
+   * restriction. Return a message for an error on `key`, or null when the changeset is fine.
+   */
+  check(key: ErrorKey<T>, check: (changeset: Changeset<T>) => string | null | undefined, code = 'invalid'): Changeset<T> {
+    const message = check(this);
+    return message ? this.addError(key, message, code) : this;
   }
 
   /** Trusted values for several columns at once. Values equal to the stored ones are not changes. */
