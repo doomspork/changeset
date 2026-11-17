@@ -208,7 +208,8 @@ export function adapterContract<Where>(name: string, harness: ContractHarness<Wh
         expectViolation(missing, 'foreign_key', fk, ['parentId']);
         const parent = await insert({ sku: 'p' });
         await insert({ sku: 'c', parentId: parent.id });
-        expectViolation(await rejection(() => adapter.remove(byId(parent)), 'remove of a referenced row'), 'foreign_key', fk, ['parentId']);
+        const restricted = expectViolation(await rejection(() => adapter.remove(byId(parent)), 'remove of a referenced row'), 'foreign_key', fk, ['parentId']);
+        equal(restricted.constraint, fk, 'a restricted delete names its constraint');
         equal((await adapter.findOne(byId(parent)))?.id, parent.id, 'referenced row still stored');
       });
 

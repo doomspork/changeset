@@ -23,8 +23,13 @@ export interface MemoryForeignKey<Row> extends Named {
   referencedColumns?: readonly string[];
 }
 
-/** Rows in another table (or this one) reference this table, so a referenced row can't be removed. */
-export interface MemoryReferencedBy extends Named {
+/**
+ * Rows in another table (or this one) reference this table, so a referenced row can't be removed. The
+ * violation reports the constraint's name only: its columns belong to the referencing table.
+ */
+export interface MemoryReferencedBy {
+  /** The foreign key's constraint name. */
+  name: string;
   /** The referencing rows, read at remove time. */
   rows: () => readonly object[];
   /** The referencing columns. */
@@ -136,7 +141,7 @@ export function memoryAdapter<Row extends object>(options: MemoryOptions<Row>): 
         const referenced = reference
           .rows()
           .some((row) => row !== current && reference.columns.every((column, i) => sameValue(read(row, column), read(current, targets[i]!))));
-        if (referenced) throw violated('foreign_key', reference, reference.columns);
+        if (referenced) throw violated('foreign_key', reference);
       }
       rows.splice(index, 1);
       return copy(current);
