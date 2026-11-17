@@ -392,7 +392,8 @@ export class Changeset<T extends object> {
 
   /**
    * A step the repo runs inside the write, after validation, with its context: for a check or a value
-   * that needs a lookup. `Ctx` is the repo's context type; the changeset doesn't check it.
+   * that needs a lookup. Steps run in the order declared; a step declared from inside another step is
+   * not run. `Ctx` is the repo's context type; the changeset doesn't check it.
    */
   prepare<Ctx>(prepare: Prepare<T, Ctx>): Changeset<T> {
     return this.with({ prepares: [...this.prepares, prepare as Prepare<T, never>] });

@@ -12,8 +12,8 @@ const files = (dir: string): string[] =>
 
 /** Every import and re-export in a file, with whether it is type-only. */
 const imports = (file: string) =>
-  [...readFileSync(file, 'utf8').matchAll(/^\s*(import|export)\s+(type\s+)?(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]/gm)].map(
-    ([, , typeOnly, specifier]) => ({ specifier: specifier!, typeOnly: Boolean(typeOnly) })
+  [...readFileSync(file, 'utf8').matchAll(/^\s*(import|export)\s+(type\s+)?(?:[^'";]*?\sfrom\s*)?['"]([^'"]+)['"]|\bimport\s*\(\s*()['"]([^'"]+)['"]/gm)].map(
+    ([, , typeOnly, specifier, , dynamic]) => ({ specifier: (specifier ?? dynamic)!, typeOnly: Boolean(typeOnly) })
   );
 
 const isCore = (file: string) => !relative(src, file).includes('/');

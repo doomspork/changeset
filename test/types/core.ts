@@ -78,10 +78,18 @@ const projects = repo<Project, Partial<Project>, string, { rows: Project[] }>({
   adapter: (ctx) => fakeAdapter(ctx.rows),
   find: (id) => ({ id })
 });
-// @ts-expect-error a changeset for another row type
-void projects.insert(() => Changeset.of<Other>(null), { rows: [] });
-// @ts-expect-error protect takes real columns
-repo<Project, Partial<Project>, string, unknown>({ adapter: () => fakeAdapter([]), find: (id) => ({ id }), protect: ['nope'] });
+void projects.insert(
+  // @ts-expect-error a changeset for another row type
+  () => Changeset.of<Other>(null),
+  { rows: [] }
+);
+void projects.insert(() => Changeset.of<Project>(null), { rows: [] });
+repo<Project, Partial<Project>, string, unknown>({
+  adapter: () => fakeAdapter([]),
+  find: (id) => ({ id }),
+  // @ts-expect-error protect takes real columns
+  protect: ['nope']
+});
 
 // What does compile: values are inferred from the row.
 const name: string | undefined = cast(stored(), {}, fields, ['name']).getField('name');

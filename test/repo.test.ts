@@ -220,6 +220,23 @@ describe('prepare', () => {
     expect(ran).toBe(false);
   });
 
+  it('does not run a prepare step added by another prepare step', async () => {
+    let nested = false;
+    const result = await projects.update(
+      'p1',
+      (row) =>
+        change(row, { name: 'x' }).prepare((cs) =>
+          cs.prepare((inner) => {
+            nested = true;
+            return inner;
+          })
+        ),
+      context()
+    );
+    expect(result.ok).toBe(true);
+    expect(nested).toBe(false);
+  });
+
   it('can add an error, which stops the write', async () => {
     const ctx = context();
     const result = await projects.update(
