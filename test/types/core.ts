@@ -96,3 +96,16 @@ const name: string | undefined = cast(stored(), {}, fields, ['name']).getField('
 const diff: { from: Project['status'] | undefined; to: Project['status'] } | undefined = Changeset.of(stored()).diff().status;
 
 void [mistyped, mistypedValibot, nullable, unknownColumn, leak, name, diff];
+
+// castEmbed: subkey schemas are typed by the JSON column's object type.
+Changeset.of(stored()).castEmbed('settings', { theme: z.string() }, ['theme']);
+// @ts-expect-error notify is a boolean
+Changeset.of(stored()).castEmbed('settings', { notify: z.string() }, ['notify']);
+// @ts-expect-error colour is not a settings key
+Changeset.of(stored()).castEmbed('settings', { colour: z.string() }, ['colour']);
+// @ts-expect-error notify has no schema
+Changeset.of(stored()).castEmbed('settings', { theme: z.string() }, ['theme', 'notify']);
+// A row-level error key may name a path inside a column, but not an unknown column.
+Changeset.of(stored()).addError('settings.theme', 'bad');
+// @ts-expect-error no such column
+Changeset.of(stored()).addError('colour.x', 'bad');
