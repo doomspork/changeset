@@ -14,7 +14,7 @@ Instead of one function per form, field and status change, a model gets a few na
 `status`, `archive`) and every write goes through the same pipeline.
 
 ```sh
-pnpm add changeset
+pnpm add changeset   # provisional: the published name isn't chosen yet, and `changeset` on npm is another package
 ```
 
 Node 22+, ESM only. Field schemas are anything that implements [Standard Schema](https://standardschema.dev): zod

@@ -3,6 +3,11 @@
 How a Drizzle adapter would meet the adapter contract. This package doesn't depend on Drizzle; this is the
 plan for `changeset/drizzle`. The code below is a sketch, not compiled against Drizzle.
 
+The Postgres error fields below were observed from node-postgres against Postgres 17, using this repo's test schema.
+These Drizzle API names come from memory of its API and still need checking against the version the adapter
+targets: `DrizzleQueryError`, `getTableColumns`, the shape of `getTableConfig`'s foreign keys (`getName()`,
+`reference()`), unique constraints and checks, and `$returningId()`.
+
 ## The contract
 
 ```ts
@@ -78,13 +83,14 @@ column's precision, so equality on an `updatedAt` read back from the database ho
 
 ## `violation`
 
-With node-postgres or postgres.js, a constraint failure carries the SQLSTATE `code`, the `constraint` name, the
-`table` and a `detail`:
+With node-postgres, a constraint failure carries the SQLSTATE `code`, the `constraint` name, the `table` and a
+`detail`. postgres.js reports the same fields, as `constraint_name` and `table_name`. These are the values node-postgres
+gave for the contract's `items` table:
 
 | SQLSTATE | kind          | detail                                                                                                |
 | -------- | ------------- | ----------------------------------------------------------------------------------------------------- |
-| `23505`  | `unique`      | `Key (account_id, slug)=(…, …) already exists.`                                                       |
-| `23503`  | `foreign_key` | Insert or update: `Key (owner_id)=(…) is not present in table "users".` Delete: `Key (id)=(…) is still referenced from table "projects".` |
+| `23505`  | `unique`      | `Key (sku)=(a) already exists.` A compound key lists every column: `Key (account_id, slug)=(…, …)`.   |
+| `23503`  | `foreign_key` | Insert or update: `Key (parent_id)=(…) is not present in table "items".` Delete: `Key (id)=(…) is still referenced from table "projects".`, with `table` set to the referencing table (`projects`) |
 | `23514`  | `check`       | `Failing row contains (…).` No columns.                                                                |
 
 Recent Drizzle versions wrap the driver's error in a `DrizzleQueryError` and put the original error in `cause`. The

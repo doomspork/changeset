@@ -41,7 +41,8 @@
     "prisma:generate": "node test/prisma/generate.mjs",
     "prepare": "node test/prisma/generate.mjs",
     "test:unit": "vitest run --project unit",
-    "db:up": "docker compose up -d --wait"
+    "db:up": "docker compose up -d --wait",
+    "prepack": "pnpm build"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
