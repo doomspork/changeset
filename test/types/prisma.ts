@@ -2,7 +2,7 @@
 // explicit type arguments. `pnpm typecheck` needs the clients generated (`pnpm prisma:generate`).
 import { z } from 'zod';
 import { type Adapter, Changeset, repo } from '../../src/index.js';
-import { prismaAdapter } from '../../src/adapters/prisma.js';
+import { type PrismaCreate, type PrismaRow, type PrismaUpdate, type PrismaWhere, prismaAdapter } from '../../src/adapters/prisma.js';
 import type { PrismaClient as V6Engine } from '../prisma/v6/generated/v6-engine/client/index.js';
 import type { PrismaClient as V6Client, Prisma as V6ClientPrisma } from '../prisma/v6/generated/v6-client/client/client.js';
 import type { PrismaClient as V7Client, Prisma as V7ClientPrisma } from '../prisma/v7/generated/v7-client/client/client.js';
@@ -107,3 +107,15 @@ void v7Client.$transaction(async (tx) => {
   // @ts-expect-error a Date is not a JSON value
   Changeset.of<Row>(null).castEmbed('settings', { at: z.date() }, ['at']);
 }
+
+// The create and update input types, read from each client's type map.
+expectType<Equal<PrismaCreate<V6Engine['project']>, V6EnginePrisma.ProjectCreateArgs['data']>>(true);
+expectType<Equal<PrismaUpdate<V6Engine['project']>, V6EnginePrisma.ProjectUpdateArgs['data']>>(true);
+expectType<Equal<PrismaCreate<V6Client['project']>, V6ClientPrisma.ProjectCreateArgs['data']>>(true);
+expectType<Equal<PrismaUpdate<V6Client['project']>, V6ClientPrisma.ProjectUpdateArgs['data']>>(true);
+expectType<Equal<PrismaCreate<V7Client['project']>, V7ClientPrisma.ProjectCreateArgs['data']>>(true);
+expectType<Equal<PrismaUpdate<V7Client['project']>, V7ClientPrisma.ProjectUpdateArgs['data']>>(true);
+expectType<Equal<PrismaCreate<V7Js['project']>, V7JsPrisma.ProjectCreateArgs['data']>>(true);
+expectType<Equal<PrismaUpdate<V7Js['project']>, V7JsPrisma.ProjectUpdateArgs['data']>>(true);
+expectType<Equal<PrismaWhere<V7Js['item']>, V7JsPrisma.ItemWhereUniqueInput>>(true);
+expectType<Equal<PrismaRow<V7Js['item']>['parentId'], string | null>>(true);
