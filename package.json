@@ -1,6 +1,6 @@
 {
   "name": "changeset",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Validated, constraint-aware writes for TypeScript ORMs.",
   "license": "MIT",
   "type": "module",
