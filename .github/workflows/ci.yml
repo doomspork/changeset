@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: changeset
+          POSTGRES_PASSWORD: changeset
+          POSTGRES_DB: changeset_test
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U changeset"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://changeset:changeset@localhost:54329/changeset_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      # Installing also generates the five test Prisma clients (Prisma 6 and 7, both generators).
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: Load every entry point from dist
+        run: |
+          for entry in "" /prisma /memory /testing; do
+            node -e "import('changeset$entry').then((m) => console.log('changeset$entry', Object.keys(m).join(', ')))"
+          done

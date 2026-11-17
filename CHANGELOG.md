@@ -1,6 +1,3 @@
 # Changelog
 
-## Unreleased
-
-- Core: `Changeset`, `cast`, `change`, validators, constraint declarations, `prepare`, `diff`, `errorMessages`.
-- `repo` with `insert` and `update`, `unwrap`, `ChangesetError`, `NotFoundError`, `ProtectedColumnError`.
+This file is maintained by release-please from conventional commit messages.
