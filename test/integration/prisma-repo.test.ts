@@ -98,7 +98,6 @@ for (const setup of selectedSetups()) {
       );
       expect(restricted.changeset.errors).toEqual({ id: [{ message: 'still owns projects', code: 'foreign_key' }] });
 
-      await prisma.auditEntry.deleteMany();
       const deleteProject = repo({ adapter: (c: Ctx) => prismaAdapter(c.db.project), find: (id: string) => ({ id }), lock: ['updatedAt'] });
       const removed = await deleteProject.delete(project.id, (row) => Changeset.of(row), ctx());
       expect(unwrap(removed).id).toBe(project.id);
