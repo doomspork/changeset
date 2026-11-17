@@ -6,7 +6,13 @@ import { type Changeset, type ConstraintViolation, errorMessages, type Field } f
 // caller passes through: a client or transaction handle, a session. The repo never opens a transaction;
 // writes that must land together run on a transaction handle the caller puts in `Ctx`.
 
-/** The I/O a repo needs, for one table. Each ORM gets an adapter that implements it. */
+/**
+ * The I/O a repo needs, for one table. Each ORM gets an adapter that implements it; the adapter contract
+ * tests in `changeset/testing` check one.
+ *
+ * Every row an adapter returns is a fresh object: changing it must not change what a later read returns,
+ * and a later write must not change it. A changeset keeps the row it was built over as `data`.
+ */
 export interface Adapter<Row, Where> {
   /** The one row `where` matches, or null. */
   findOne(where: Where): Promise<Row | null>;
@@ -14,7 +20,14 @@ export interface Adapter<Row, Where> {
   insert(data: Partial<Row>): Promise<Row>;
   /** Writes `data` to the one row `where` matches and returns it as stored; null when nothing matched. */
   update(where: Where, data: Partial<Row>): Promise<Row | null>;
-  /** The driver's constraint failure, normalized; null for any other error. */
+  /** Deletes the one row `where` matches and returns it as it was; null when nothing matched. */
+  remove(where: Where): Promise<Row | null>;
+  /** `where`, further limited to rows whose columns equal `values`. Used to detect stale writes. */
+  narrow(where: Where, values: Partial<Row>): Where;
+  /**
+   * The driver's constraint failure, normalized; null for any other error. `columns`, when present, are
+   * the row's keys, not database column names.
+   */
   violation(error: unknown): ConstraintViolation | null;
 }
 

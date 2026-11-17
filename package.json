@@ -17,26 +17,36 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./prisma": {
+      "types": "./dist/adapters/prisma.d.ts",
+      "import": "./dist/adapters/prisma.js"
+    },
+    "./memory": {
+      "types": "./dist/adapters/memory.d.ts",
+      "import": "./dist/adapters/memory.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "build": "rm -rf dist && tsc -p tsconfig.build.json"
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prisma:generate": "node test/prisma/generate.mjs",
+    "prepare": "node test/prisma/generate.mjs",
+    "test:unit": "vitest run --project unit",
+    "db:up": "docker compose up -d --wait"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "typescript": "6.0.3",
     "valibot": "1.5.0",
     "vitest": "5.0.5",
     "zod": "4.6.7"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "prisma",
-      "@prisma/engines",
-      "@prisma/client"
-    ]
   }
 }
