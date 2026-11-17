@@ -88,6 +88,12 @@ export function fakeAdapter<Row extends { id: string }>(
       if (columns) throw Object.assign(new Error('unique'), { columns });
       return { ...Object.assign(row, data) };
     },
+    remove: async (where: Partial<Row>) => {
+      adapter.writes++;
+      const index = rows.findIndex((candidate) => matches(candidate, where));
+      return index === -1 ? null : { ...rows.splice(index, 1)[0]! };
+    },
+    narrow: (where: Partial<Row>, values: Partial<Row>) => ({ ...where, ...values }),
     violation: (error: unknown): ConstraintViolation | null => {
       const { columns, violation } = error as { columns?: string[]; violation?: ConstraintViolation };
       return violation ?? (columns ? { kind: 'unique', columns } : null);
