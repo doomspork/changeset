@@ -1,0 +1,10 @@
+{
+  "name": "@changeset-test/prisma-v7",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "prisma": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "@prisma/adapter-pg": "7.10.1"
+  }
+}

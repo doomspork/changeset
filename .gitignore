@@ -4,4 +4,4 @@ dist
 coverage
 *.tsbuildinfo
 .env
-test/prisma/generated
+test/prisma/v*/generated

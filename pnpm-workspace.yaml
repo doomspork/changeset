@@ -1,0 +1,8 @@
+packages:
+  - test/prisma/v6
+  - test/prisma/v7
+onlyBuiltDependencies:
+  - esbuild
+  - prisma
+  - '@prisma/engines'
+  - '@prisma/client'
