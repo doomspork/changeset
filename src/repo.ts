@@ -26,7 +26,8 @@ export interface Adapter<Row, Where> {
   narrow(where: Where, values: Partial<Row>): Where;
   /**
    * The driver's constraint failure, normalized; null for any other error. `columns`, when present, are
-   * the row's keys, not database column names.
+   * this table's columns that the constraint covers, as the row's keys, not database column names. A
+   * delete restricted by another table's foreign key reports that constraint's name and no columns.
    */
   violation(error: unknown): ConstraintViolation | null;
 }
