@@ -1,0 +1,24 @@
+---
+title: Transactions
+description: Run several writes atomically by putting a transaction handle in the repo's context.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The library never opens a transaction. Writes that must land together run on a transaction handle that the caller
+puts in the context; the repo builds its adapter from it per call.
+
+```ts
+await prisma.$transaction(async (tx) => {
+  const ctx = { db: tx, session };
+  const project = unwrap(await createProject(attrs, ctx));
+  unwrap(await createProject(otherAttrs, ctx));   // a ChangesetError here rolls back both
+});
+```
+
+An `afterWrite` audit entry written with `ctx.db` lands in the same transaction.
+
+<Aside type="caution" title="Postgres aborts on a failed statement">
+In Postgres, a failed statement aborts its transaction. When a constraint failure inside a transaction becomes a
+field error, end the transaction: `unwrap` the result so the error rolls it back.
+</Aside>

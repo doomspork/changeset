@@ -1,0 +1,64 @@
+---
+title: Repos
+description: Run changesets through an adapter, with tenancy, permissions, stamps, protection, locking and auditing.
+---
+
+```ts
+const things = repo({ adapter, find, authorize?, stamp?, protect?, lock?, afterWrite?, notFound? });
+
+await things.insert((ctx) => changeset, ctx);
+await things.update(key, (row, ctx) => changeset, ctx);
+await things.delete(key, (row, ctx) => changeset, ctx);
+// → { ok: true, row, changeset } | { ok: false, changeset }
+```
+
+## Options
+
+| Option       | What |
+| ------------ | ---- |
+| `adapter`    | `(ctx) => Adapter`. Built per call, so it can use a transaction handle from the context. |
+| `find`       | `(key, ctx) => where`. Finds one row, including anything every write must match (a tenant, an owner). |
+| `authorize`  | `(action, ctx)`. Throws to refuse; runs before anything else. `action` is `insert`, `update` or `delete`. |
+| `stamp`      | `{ insert?(ctx), update?(ctx) }`. Columns set from the context, laid over the changes, so they always win. |
+| `protect`    | Columns no changeset may change, by `cast`, `putChange` or a `prepare` step. A change throws `ProtectedColumnError`. Stamps may still set them. |
+| `lock`       | Columns whose stored values an update or delete must still match, such as `updatedAt`. When the row changed since it was read, the result is a `base` error with code `stale`. |
+| `afterWrite` | `(row, changeset, ctx, action)`. Runs after each successful write, on the same context. Not run for a no-op update. Its errors propagate. |
+| `notFound`   | `(key, ctx) => Error`. What a missing row throws; `NotFoundError` by default. |
+
+## Operations
+
+- **`update`:** finds the row with `find`, builds the changeset over it, and writes with the same `where`. A valid
+  changeset with no changes doesn't write.
+- **`delete`:** builds a changeset over the row that carries only checks, such as `check` or
+  `foreignKeyConstraint`. A delete changeset that changes a column throws. On success, `row` is the row as it was.
+- **Typing:** `find`'s return type must be the adapter's `where`. With `prismaAdapter`, that is the model's unique
+  `where`.
+
+## App rules as options
+
+Tenancy, ownership and permissions aren't built in. They're the app's rules, expressed through the repo's options:
+
+```ts
+const projects = repo({
+  adapter: ({ db }: AppContext) => prismaAdapter(db.project),
+  // Another account's row reads as missing: the tenant is part of every where.
+  find: (id: string, { session }) => ({ id, accountId: session.accountId }),
+  authorize: (action, { session }) => {
+    if (!session.can(action === 'delete' ? 'projects:delete' : 'projects:write')) throw new ForbiddenError();
+  },
+  // Laid over the changes, so they always win.
+  stamp: { insert: ({ session }) => ({ accountId: session.accountId, ownerId: session.userId }) },
+  // A changeset that changes one of these throws, whichever way the change got in.
+  protect: ['id', 'accountId', 'ownerId', 'createdAt', 'updatedAt'],
+  // An update or delete must still match the updatedAt it read.
+  lock: ['updatedAt'],
+  afterWrite: async (row, changeset, { db, session }, action) => {
+    // JSON round trip: Prisma's Json input doesn't take Date values.
+    const diff = JSON.parse(JSON.stringify(changeset.diff()));
+    await db.auditEntry.create({ data: { projectId: row.id, actorId: session.userId, action, diff } });
+  },
+  notFound: () => new ProjectNotFoundError()
+});
+```
+
+The [multi-tenant example](/changeset/examples/multi-tenant/) builds a full app layer on this.

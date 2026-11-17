@@ -1,0 +1,21 @@
+---
+title: Memory
+description: An in-memory table with SQL-like constraints, for fast unit tests.
+---
+
+```ts
+import { memoryAdapter } from 'changeset/memory';
+
+const projects = memoryAdapter<Project>({
+  rows: [],                                             // shared with the caller
+  defaults: (data) => ({ id: crypto.randomUUID(), status: 'draft', ...data }) as Project,
+  onUpdate: () => ({ updatedAt: new Date() }),
+  unique: [{ name: 'projects_account_id_slug_key', columns: ['accountId', 'slug'] }],
+  foreignKeys: [{ columns: ['ownerId'], references: () => users }],
+  referencedBy: [{ name: 'tasks_project_id_fkey', rows: () => tasks, columns: ['projectId'] }],
+  checks: [{ name: 'projects_priority_check', columns: ['priority'], test: (row) => row.priority >= 0 }]
+});
+```
+
+An in-memory table for tests. Its `where` is a partial row, matched by equality. Constraints behave as they do in
+SQL: null never conflicts and never fails a foreign key, and a failure leaves the table unchanged.

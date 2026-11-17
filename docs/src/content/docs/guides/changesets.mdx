@@ -1,0 +1,108 @@
+---
+title: Changesets
+description: Build a changeset from untrusted input and trusted values, and read it back.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+```ts
+Changeset.of<Row>(null)   // an insert
+Changeset.of(row)         // an update (or a delete's checks) over the stored row
+```
+
+A changeset is immutable: each method returns a new one. Read it with:
+
+| Member          | What                                                                    |
+| --------------- | ----------------------------------------------------------------------- |
+| `data`          | The stored row, or `null` for an insert                                 |
+| `changes`       | The columns the write would change                                      |
+| `errors`        | Problems, keyed by column, `base`, or a path such as `address.city`     |
+| `valid`         | No errors                                                               |
+| `changed`       | At least one change                                                     |
+| `action`        | `'insert'` or `'update'`                                                |
+| `getField(key)` | The change if there is one, else the stored value                       |
+| `getChange(key)`| The change only                                                         |
+| `diff()`        | `{ column: { from, to } }` — the payload for an audit entry             |
+| `params`        | The raw attributes given to `cast`                                      |
+
+<Aside>
+For an insert, `T` can't be inferred from `null`, so write `Changeset.of<Row>(null).cast(...)`.
+</Aside>
+
+## `cast`: untrusted input
+
+```ts
+changeset.cast(attrs, fields, permitted)
+cast(data, attrs, fields, permitted)   // the same, as a function
+```
+
+- **Unpermitted keys are ignored.** Only keys listed in `permitted` are read. A permitted key with no schema is a
+  compile error.
+- **Each value is parsed by its column's schema.** The parsed value is the change. A parse failure is an error with
+  the schema's message and code `invalid`.
+- **Blank text becomes null before parsing**, so a cleared form field clears a nullable column. Blank into a column
+  whose schema rejects null is `can't be blank` (code `required`).
+- **A value equal to the stored one is not a change.** Dates compare by time, and JSON, arrays and byte arrays by
+  content.
+- **An omitted key leaves its column alone.** A key whose value is `undefined` counts as omitted.
+- **An update with no changes doesn't write.** The repo returns the stored row.
+- **Attributes must be an object.** Anything else is a `base` error.
+- **Schemas must be synchronous.** An async check (a lookup) belongs in a [`prepare` step](#prepare-async-steps-inside-the-write).
+
+```ts
+const cs = Changeset.of(project).cast({ name: '  Apollo ', role: 'admin' }, fields, ['name']);
+cs.changes; // { name: 'Apollo' } — trimmed by the schema; `role` ignored
+```
+
+## `castEmbed`: a JSON column
+
+```ts
+Changeset.of(row)
+  .cast(attrs, fields, ['name'])
+  .castEmbed('address', { line1: z.string(), city: z.string(), zip: z.string().nullable() }, ['line1', 'city', 'zip'])
+```
+
+`castEmbed` reads `attrs.address` as an object, by the same rules as `cast`:
+
+- **Only the subkeys present change.** The others keep their stored values.
+- **Nested errors are keyed by path**, such as `address.city`.
+- **A value that isn't an object** is an error on `address`.
+- **Subkey schemas are typed** from the column's object type. A Prisma `Json` column accepts any subkeys with
+  JSON-valued schemas.
+
+## `change` and `putChange`: trusted values
+
+```ts
+change(row, { status: 'archived', archivedAt: new Date() })
+changeset.change({ ... })
+changeset.putChange('status', 'archived')
+changeset.updateChange('email', (email) => email.toLowerCase())   // only if it changed
+changeset.deleteChange('slug')
+```
+
+These values aren't parsed. A value equal to the stored one is still not a change.
+
+## `prepare`: async steps inside the write
+
+```ts
+changeset.prepare<Ctx>(async (changeset, ctx) => {
+  const taken = await ctx.db.reservedSlug.findUnique({ where: { slug: changeset.getField('slug') } });
+  return taken ? changeset.addError('slug', 'is reserved') : changeset;
+})
+```
+
+- **When steps run:** after validation passes, in the order declared, with the repo's context.
+- **What a step can do:** add changes or errors. An error stops the write.
+- **Protected columns:** checked again after the steps run.
+- **Nesting:** a step declared from inside another step doesn't run.
+
+## `errorMessages` and `unwrap`
+
+`errorMessages(changeset)` flattens the errors into `['slug has already been taken', ...]`.
+
+`unwrap(result)` returns the row, or throws a `ChangesetError` carrying the changeset. To throw your own error type
+instead, pass a function:
+
+```ts
+unwrap(result, (cs) => new HttpError(422, cs.errors));
+```

@@ -1,0 +1,77 @@
+---
+title: Why changeset
+description: The problem changeset solves and what you get by routing writes through it.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Most apps write a row in many places: a create form, an edit form, a status toggle, an admin tool, a background
+job. Each place re-implements the same concerns — which fields the caller may set, how to parse them, which rules
+apply, what to do when the database rejects the write — and each does it slightly differently.
+
+**changeset** gives every write to a row one shape and one pipeline. The idea comes from Elixir's Ecto: a
+**changeset** is a proposed write to one row, built up by small, immutable steps and inspected before anything
+touches the database.
+
+## What a changeset holds
+
+| Property  | What                                                                  |
+| --------- | --------------------------------------------------------------------- |
+| `data`    | The row as stored, or `null` for an insert                             |
+| `changes` | The columns this write would change                                    |
+| `errors`  | Every problem with the write, keyed by column                          |
+
+Untrusted input enters through `cast`, which reads only the columns you permit and parses each with that column's
+schema. Trusted values enter through `change` and `putChange`. Validators add errors and never throw, so a caller
+gets every problem at once.
+
+A **repo** runs a valid changeset through an **adapter** (Prisma, in-memory, or your own), and turns a database
+constraint you declared — unique, foreign key, check — into a field error instead of an exception.
+
+## The advantages
+
+### All errors, keyed by field
+
+```ts
+const result = await projects.insert(() => projectChangesets.create(req.body, owner), prisma);
+if (!result.ok) return res.status(422).json(result.changeset.errors);
+```
+
+`errors` already has the shape a form wants: `{ name: [...], slug: [...] }`. Parse failures, validator failures
+and constraint failures all land there with a `message` and a `code`.
+
+### Database constraints are part of validation
+
+A uniqueness check in application code races with concurrent writes; the database's unique index doesn't. With
+`uniqueConstraint('slug', ['accountId', 'slug'])`, the index stays the source of truth, and its failure comes back
+as `{ slug: [{ message: 'has already been taken', code: 'unique' }] }`.
+
+### Safe by construction
+
+- Keys you didn't permit are ignored, so a request can't set `accountId` or `ownerId` through a form.
+- A repo's `protect` option throws if *any* changeset tries to change a protected column, however the change got in.
+- Blank strings become `null` before parsing, so a cleared form field clears a nullable column instead of storing
+  `''`.
+- A value equal to the stored one isn't a change, and an update with no changes doesn't write.
+
+### Cross-cutting rules live in one place
+
+Tenancy, permissions, stamps from the session, optimistic locking and audit logging are [repo
+options](/changeset/guides/repos/). Every write through the repo gets them; none of your changesets repeat them.
+
+### Types that catch mistakes
+
+With Prisma, row, `where` and context types are inferred from the delegate. Field schemas are checked against the
+column types, permitted keys must have schemas, and `validateTransition` rejects states the column can't hold —
+all at compile time.
+
+### Small and portable
+
+No runtime dependencies. Schemas are any [Standard Schema](https://standardschema.dev) implementation (zod 3.24+
+and 4, valibot, arktype). Adapters are a six-method interface with a [contract test
+suite](/changeset/adapters/writing/), and an in-memory adapter makes unit tests fast.
+
+<Aside type="note" title="What it isn't">
+changeset isn't an ORM or a query builder. It doesn't read lists, run migrations or open transactions. It sits on
+top of your ORM and owns one thing: writing a single row correctly.
+</Aside>

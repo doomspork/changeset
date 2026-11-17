@@ -1,0 +1,5 @@
+# Makes docs/ its own pnpm root, so installing the site never touches the library's workspace or lockfile.
+packages: []
+onlyBuiltDependencies:
+  - esbuild
+  - sharp

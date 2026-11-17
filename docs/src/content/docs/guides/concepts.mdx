@@ -1,0 +1,65 @@
+---
+title: Core concepts
+description: Changesets, repos and adapters, and the path a write takes through them.
+---
+
+changeset has three parts. Each has one job.
+
+## Changeset — what the write is
+
+A changeset is an immutable value describing a proposed write to one row: the stored row (`data`), the columns
+that would change (`changes`), and every problem found (`errors`). You build one by chaining steps; each returns a
+new changeset.
+
+```ts
+Changeset.of<Row>(null)   // an insert
+Changeset.of(row)         // an update (or a delete's checks) over the stored row
+```
+
+A changeset never touches the database. You can build one in a unit test, inspect `valid`, `changes` and
+`errors`, and never need a connection.
+
+## Repo — how the write runs
+
+A repo ties a changeset to storage. It finds the row, authorizes the action, builds your changeset over it, lays
+stamps over the changes, runs async `prepare` steps, writes through the adapter, maps constraint failures to field
+errors, and runs `afterWrite`.
+
+```ts
+const things = repo({ adapter, find, authorize?, stamp?, protect?, lock?, afterWrite?, notFound? });
+
+await things.insert((ctx) => changeset, ctx);
+await things.update(key, (row, ctx) => changeset, ctx);
+await things.delete(key, (row, ctx) => changeset, ctx);
+// → { ok: true, row, changeset } | { ok: false, changeset }
+```
+
+## Adapter — where the write lands
+
+An adapter is six methods over one table: `findOne`, `insert`, `update`, `remove`, `narrow` (for locking) and
+`violation` (which normalizes a thrown database error into `{ kind, constraint?, columns? }`). The library ships
+[Prisma](/changeset/adapters/prisma/) and [in-memory](/changeset/adapters/memory/) adapters, and a [contract
+suite](/changeset/adapters/writing/) for writing your own.
+
+## The life of an update
+
+This is the order `repo.update` runs in (from `src/repo.ts`):
+
+1. `authorize('update', ctx)` runs first and throws to refuse.
+2. The adapter is built from the context, `find(key, ctx)` builds the `where`, and the adapter reads the row. A
+   missing row throws `notFound`.
+3. Your changeset function runs over the row: `cast`, `change`, validators, constraint declarations.
+4. A valid changeset with no changes returns the stored row. Nothing is written.
+5. An invalid changeset returns `{ ok: false, changeset }`.
+6. `protect` throws `ProtectedColumnError` if the changeset changes a protected column.
+7. `prepare` steps run in order with the context. If one adds an error, the write stops; `protect` is checked
+   again.
+8. The adapter writes the changes with `stamp.update(ctx)` laid over them, using the `where` narrowed by the
+   `lock` columns as read.
+   - A declared constraint failure becomes a field error.
+   - When the row still exists but a locked column moved, the result is a `base` error with code `stale`.
+9. `afterWrite(row, changeset, ctx, 'update')` runs on the same context — inside your transaction, if there is
+   one.
+
+`insert` follows the same steps without the read, the no-op check or the lock. `delete` reads the row and runs the
+changeset's checks; a delete changeset that changes a column throws.
