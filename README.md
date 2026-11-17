@@ -3,6 +3,8 @@
 Validated, constraint-aware writes for TypeScript ORMs. Ships with a Prisma adapter and an in-memory adapter; has no
 runtime dependencies.
 
+**Documentation:** [doomspork.github.io/changeset](https://doomspork.github.io/changeset/)
+
 A **changeset** is a proposed write to one row. It holds the row as stored (`data`, or null for an insert), the
 columns the write would change (`changes`), and every problem with it (`errors`, by column). Untrusted input enters
 through `cast`, which reads only the columns you permit and parses each with that column's schema; trusted values
@@ -437,6 +439,9 @@ pnpm build
 
 The test Prisma schema is `test/prisma/models.prisma`. `test/prisma/v6` and `test/prisma/v7` each generate clients
 for their Prisma major. `PRISMA_SETUPS=v7-client,v6-engine` narrows which setups the integration tests run.
+
+The documentation site is an Astro Starlight project in `docs/`, with its own lockfile. Run `pnpm install` and
+`pnpm dev` inside `docs/`. It deploys to GitHub Pages from `main` through `.github/workflows/docs.yml`.
 
 ## License
 

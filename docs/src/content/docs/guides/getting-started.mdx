@@ -1,0 +1,101 @@
+---
+title: Getting started
+description: Install changeset, define field schemas, and write your first changeset and repo.
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components';
+
+## Install
+
+```sh
+pnpm add changeset
+```
+
+<Aside type="caution" title="Provisional package name">
+The published name isn't chosen yet, and `changeset` on npm is another package. Check the
+[repository](https://github.com/doomspork/changeset) for the current status.
+</Aside>
+
+Requirements: **Node 22+**, ESM only. Bring any [Standard Schema](https://standardschema.dev) library for field
+schemas — zod 3.24+ and 4, valibot or arktype.
+
+| Entry point         | What                                                  |
+| ------------------- | ----------------------------------------------------- |
+| `changeset`         | `Changeset`, `cast`, validators, `repo`, `unwrap`      |
+| `changeset/prisma`  | `prismaAdapter`, `prismaViolation`                     |
+| `changeset/memory`  | `memoryAdapter`, an in-memory table for tests          |
+| `changeset/testing` | `adapterContract`, the test suite every adapter passes |
+
+## Your first write
+
+<Steps>
+
+1. **Name the row type.** With Prisma, `PrismaRow` reads it from the generated delegate.
+
+   ```ts
+   import { z } from 'zod';
+   import { Changeset, type Fields, repo, unwrap } from 'changeset';
+   import { prismaAdapter, type PrismaRow } from 'changeset/prisma';
+   import type { PrismaClient } from './generated/prisma/client';
+
+   type Project = PrismaRow<PrismaClient['project']>;
+   ```
+
+2. **Give each column a user may set a schema.** `satisfies Fields<Project>` makes a schema whose output doesn't
+   match the column's type a compile error.
+
+   ```ts
+   const fields = {
+     name: z.string().trim().min(1).max(120),
+     slug: z.string().trim().toLowerCase().regex(/^[a-z0-9-]+$/),
+     description: z.string().max(2000).nullable()
+   } satisfies Fields<Project>;
+   ```
+
+3. **Write named changesets** — one per way the row may be written.
+
+   ```ts
+   const projectChangesets = {
+     create: (attrs: unknown, owner: { accountId: string; ownerId: string }) =>
+       Changeset.of<Project>(null)
+         .cast(attrs, fields, ['name', 'slug', 'description'])
+         .change(owner)
+         .validateRequired(['name', 'slug'])
+         .uniqueConstraint('slug', ['accountId', 'slug']),
+     edit: (project: Project, attrs: unknown) =>
+       Changeset.of(project)
+         .cast(attrs, fields, ['name', 'slug', 'description'])
+         .validateRequired(['name', 'slug'])
+         .uniqueConstraint('slug', ['accountId', 'slug'])
+   };
+   ```
+
+4. **Create a repo** that knows how to build an adapter and find a row.
+
+   ```ts
+   // Row, where and context types are inferred from the delegate.
+   const projects = repo({
+     adapter: (prisma: PrismaClient) => prismaAdapter(prisma.project),
+     find: (id: string) => ({ id })
+   });
+   ```
+
+5. **Write.** A result is `{ ok: true, row, changeset }` or `{ ok: false, changeset }`.
+
+   ```ts
+   const result = await projects.insert(() => projectChangesets.create(req.body, owner), prisma);
+   if (!result.ok) return res.status(422).json(result.changeset.errors);
+   // { slug: [{ message: 'has already been taken', code: 'unique' }] }
+
+   // Or let unwrap return the row, throwing a ChangesetError on failure.
+   const project = unwrap(await projects.update(id, (row) => projectChangesets.edit(row, req.body), prisma));
+   ```
+
+</Steps>
+
+## Next steps
+
+- [Core concepts](/changeset/guides/concepts/) explains how a write flows from input to row.
+- [Changesets](/changeset/guides/changesets/) and [Validators](/changeset/guides/validators/) cover every method.
+- [Repos](/changeset/guides/repos/) adds tenancy, permissions, locking and auditing.
+- [Multi-tenant example](/changeset/examples/multi-tenant/) shows all of it together.

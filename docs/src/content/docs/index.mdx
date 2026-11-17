@@ -1,0 +1,79 @@
+---
+title: changeset
+description: Validated, constraint-aware writes for TypeScript ORMs.
+template: splash
+hero:
+  tagline: Validated, constraint-aware writes for TypeScript ORMs. Every write to a row goes through one pipeline that parses untrusted input, collects every error at once, and turns database constraint failures into field errors.
+  actions:
+    - text: Get started
+      link: /changeset/guides/getting-started/
+      icon: right-arrow
+    - text: Why changeset?
+      link: /changeset/guides/why/
+      variant: minimal
+    - text: View on GitHub
+      link: https://github.com/doomspork/changeset
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## A write, in one expression
+
+```ts
+const projectChangesets = {
+  create: (attrs: unknown, owner: { accountId: string; ownerId: string }) =>
+    Changeset.of<Project>(null)
+      .cast(attrs, fields, ['name', 'slug', 'description']) // untrusted input, parsed per column
+      .change(owner)                                         // trusted values
+      .validateRequired(['name', 'slug'])
+      .uniqueConstraint('slug', ['accountId', 'slug'])       // a DB failure becomes a field error
+};
+
+const result = await projects.insert(() => projectChangesets.create(req.body, owner), prisma);
+if (!result.ok) return res.status(422).json(result.changeset.errors);
+// { slug: [{ message: 'has already been taken', code: 'unique' }] }
+```
+
+## Why use it
+
+<CardGrid>
+  <Card title="Every error at once" icon="list-format">
+    Validators add errors and never throw. A form submission gets back every problem, keyed by column, in one
+    response.
+  </Card>
+  <Card title="Constraints become field errors" icon="warning">
+    Declare a unique, foreign key or check constraint on the changeset and a violation comes back as
+    `{ ok: false }` with an error on the right field, not an exception.
+  </Card>
+  <Card title="Only permitted columns" icon="approve-check">
+    `cast` reads only the keys you permit and parses each with that column's schema. Mass assignment of
+    `accountId` or `role` isn't possible by accident.
+  </Card>
+  <Card title="Bring your schema library" icon="puzzle">
+    Field schemas are anything that implements [Standard Schema](https://standardschema.dev): zod 3.24+ and 4,
+    valibot, arktype.
+  </Card>
+  <Card title="Typed end to end" icon="seti:typescript">
+    Row, `where` and context types are inferred from your Prisma delegate. A schema whose output doesn't match the
+    column, or a permitted key with no schema, is a compile error.
+  </Card>
+  <Card title="No runtime dependencies" icon="rocket">
+    Node 22+, ESM only. The core imports nothing; the Prisma adapter doesn't even import Prisma.
+  </Card>
+</CardGrid>
+
+## Fewer functions, one pipeline
+
+Instead of one function per form, field and status change, a model gets a few named changesets (`create`,
+`rename`, `status`, `archive`) and every write goes through the same pipeline. Tenancy, permissions, audit logs and
+optimistic locking are options on the [repo](/changeset/guides/repos/), so they apply to every write instead of
+being repeated in each one.
+
+<CardGrid>
+  <LinkCard title="Getting started" href="/changeset/guides/getting-started/" description="Install, define fields, write your first changeset and repo." />
+  <LinkCard title="Core concepts" href="/changeset/guides/concepts/" description="Changesets, repos and adapters, and how a write flows through them." />
+  <LinkCard title="Multi-tenant example" href="/changeset/examples/multi-tenant/" description="Tenancy, permissions, protected columns, locking and auditing, built from repo options." />
+  <LinkCard title="Prisma adapter" href="/changeset/adapters/prisma/" description="Prisma 6 and 7, both generators, with and without a driver adapter." />
+</CardGrid>

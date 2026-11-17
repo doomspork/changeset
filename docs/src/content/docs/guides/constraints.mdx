@@ -1,0 +1,45 @@
+---
+title: Constraints
+description: Turn unique, foreign key and check constraint failures into field errors.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A database constraint failure is an exception unless the changeset declares it. A declared failure becomes a field
+error, and the write returns `{ ok: false }`.
+
+```ts
+changeset
+  .uniqueConstraint('slug', ['accountId', 'slug'])              // by the constraint's columns
+  .uniqueConstraint('email', 'users_email_key')                 // or by its name
+  .foreignKeyConstraint('ownerId')                              // columns default to [field]
+  .checkConstraint('priority', 'projects_priority_check', { message: 'must be 0 to 10' })
+```
+
+| Declaration            | Code          | Default message          |
+| ---------------------- | ------------- | ------------------------ |
+| `uniqueConstraint`     | `unique`      | `has already been taken` |
+| `foreignKeyConstraint` | `foreign_key` | `does not exist`         |
+| `checkConstraint`      | `check`       | `is invalid`             |
+
+## Matching
+
+- **By columns:** matches when the reported columns are exactly the declared ones, in any order.
+- **By name:** matches the reported constraint name.
+
+With Prisma, a declaration by columns works on both Prisma 6 and 7. A constraint with a custom name
+(`@@unique(..., map: "...")`) has no derivable columns: declare it by name. See [Prisma](/changeset/adapters/prisma/).
+
+## Restricted deletes
+
+A delete blocked by another table's foreign key is reported by name only, so declare it by name:
+
+```ts
+const removeUser = (user: User) =>
+  Changeset.of(user).foreignKeyConstraint('id', 'projects_owner_id_fkey', { message: 'still owns projects' });
+```
+
+<Aside type="tip" title="Why not check uniqueness in code?">
+A lookup-then-insert races with concurrent writes. The database's unique index doesn't. Declaring the constraint
+keeps the index as the source of truth while still giving users a field error.
+</Aside>

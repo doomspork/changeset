@@ -1,0 +1,50 @@
+---
+title: Writing an adapter
+description: The six-method adapter interface and the contract suite that checks an implementation.
+---
+
+```ts
+interface Adapter<Row, Where> {
+  findOne(where: Where): Promise<Row | null>;
+  insert(data: Partial<Row>): Promise<Row>;
+  update(where: Where, data: Partial<Row>): Promise<Row | null>;   // null when nothing matched
+  remove(where: Where): Promise<Row | null>;                       // null when nothing matched
+  narrow(where: Where, values: Partial<Row>): Where;               // for `lock`
+  violation(error: unknown): ConstraintViolation | null;           // { kind, constraint?, columns? }
+}
+```
+
+The contract requires two things beyond these signatures:
+
+- **Fresh rows:** every row an adapter returns is a fresh object.
+- **`violation`'s columns** are this table's columns that the constraint covers, as row keys, not database column
+  names. A delete restricted by another table's foreign key reports that constraint's name and no columns.
+
+## The contract suite
+
+Implement `Adapter<Row, Where>`, then run the contract suite. It takes your runner's `describe`, `it` and
+`beforeEach`, so it works with vitest, jest, mocha or `node:test`:
+
+```ts
+import { beforeEach, describe, it } from 'vitest';
+import { adapterContract } from 'changeset/testing';
+
+adapterContract('my adapter', {
+  adapter: () => myAdapter(db, items),
+  reset: () => db.items.deleteAll(),
+  where: (values) => toMyWhere(values),   // equality on every column given
+  constraints: { unique: 'items_sku_key', foreignKey: 'items_parent_id_fkey', check: 'items_qty_check' }
+}, { describe, it, beforeEach });
+```
+
+The suite runs against an `items` table you create:
+
+- a generated string `id`;
+- a unique `sku`;
+- `name`;
+- `qty`, defaulting to 0, with a check that it is at least 0;
+- `parentId`, a self-referencing foreign key that restricts deletes.
+
+It checks reads and writes, fresh objects, `narrow`, each kind of violation, and a repo on top. Leave `check` out
+if your setup can't report check violations. The [Drizzle plan](/changeset/adapters/drizzle/) sketches how a
+Drizzle adapter would meet the contract.

@@ -1,0 +1,77 @@
+---
+title: Drizzle (planned)
+description: How a Drizzle adapter would meet the adapter contract.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="caution" title="Not shipped yet">
+`changeset/drizzle` doesn't exist yet and this package doesn't depend on Drizzle. This page is the plan, and the
+code is a sketch that hasn't been compiled against Drizzle. The Postgres error fields were observed from
+node-postgres against Postgres 17; the Drizzle API names (`DrizzleQueryError`, `getTableColumns`,
+`getTableConfig`'s shapes, `$returningId()`) still need checking against the version the adapter targets.
+</Aside>
+
+## Types
+
+An adapter is built per call from a database or transaction handle and one table:
+
+```ts
+import type { InferInsertModel, InferSelectModel, SQL } from 'drizzle-orm';
+import type { PgDatabase, PgTable } from 'drizzle-orm/pg-core';
+
+function drizzleAdapter<T extends PgTable>(db: PgDatabase<any, any, any>, table: T): Adapter<InferSelectModel<T>, SQL | undefined>;
+```
+
+- **Row**: `InferSelectModel<T>`. Keys are the table's TypeScript keys.
+- **Where**: a SQL expression. A repo's `find` returns one:
+  `find: (id, ctx) => and(eq(projects.id, id), eq(projects.accountId, ctx.session.accountId))`.
+- **Insert and update data**: `Partial<Row>`, passed to `.values()` and `.set()`.
+
+## Reads and writes
+
+Postgres and SQLite support `RETURNING`, so each write returns the stored row in one statement:
+
+```ts
+findOne: async (where) => (await db.select().from(table).where(where).limit(1))[0] ?? null,
+insert: async (data) => (await db.insert(table).values(data as InferInsertModel<T>).returning())[0]!,
+update: async (where, data) => (await db.update(table).set(data).where(where).returning())[0] ?? null,
+remove: async (where) => (await db.delete(table).where(where).returning())[0] ?? null,
+```
+
+Unlike Prisma's unique `where`, nothing in Drizzle's types makes a `where` match at most one row, so `find` must
+return a `where` on a unique key (plus any tenant filter). MySQL has no `RETURNING`: insert with `$returningId()`
+and read back; for update and remove, read first, then write.
+
+## `narrow`, for `lock`
+
+```ts
+narrow: (where, values) =>
+  and(
+    where,
+    ...Object.entries(values).map(([key, value]) => {
+      const column = getTableColumns(table)[key]!;
+      return value === null ? isNull(column) : eq(column, value);
+    })
+  ),
+```
+
+Note `isNull` for null values: `column = NULL` is never true in SQL.
+
+## `violation`
+
+With node-postgres, a constraint failure carries the SQLSTATE `code`, the `constraint` name, the `table` and a
+`detail`:
+
+| SQLSTATE | kind          | detail |
+| -------- | ------------- | ------ |
+| `23505`  | `unique`      | `Key (sku)=(a) already exists.` A compound key lists every column. |
+| `23503`  | `foreign_key` | Insert or update: `Key (parent_id)=(…) is not present in table "items".` Delete: `Key (id)=(…) is still referenced from table "projects".`, with `table` set to the referencing table |
+| `23514`  | `check`       | `Failing row contains (…).` No columns. |
+
+The adapter would take `constraint` from the driver, look columns up in `getTableConfig(table)` by name (falling
+back to parsing `detail` for unique failures), report only the name for a delete restricted by another table, and
+map database column names to table keys through `getTableColumns(table)`. Recent Drizzle versions wrap the driver
+error in `DrizzleQueryError`, so it checks the `cause` chain for a `code`.
+
+The full write-up is in [`DRIZZLE.md`](https://github.com/doomspork/changeset/blob/main/DRIZZLE.md).

@@ -1,0 +1,53 @@
+---
+title: Validators
+description: Built-in validators, their codes and messages, and custom rules.
+---
+
+Each validator adds an error and never throws. Except for `validateRequired` and `check`, a validator runs only
+when its column changed and has no error yet.
+
+| Validator                                                | Code                  | Default message                     |
+| -------------------------------------------------------- | --------------------- | ----------------------------------- |
+| `validateRequired(keys)`                                 | `required`            | `can't be blank`                    |
+| `validateChange(key, (value, cs) => msg \| null, code?)` | your code (`invalid`) | yours                               |
+| `validateInclusion(key, values)`                         | `inclusion`           | `is invalid`                        |
+| `validateExclusion(key, values)`                         | `exclusion`           | `is reserved`                       |
+| `validateFormat(key, regex)`                             | `format`              | `has invalid format`                |
+| `validateLength(key, { min, max, is })`                  | `length`              | `should be at least 3 long`, …      |
+| `validateNumber(key, { gt, gte, lt, lte })`              | `number`              | `should be greater than 0`, …       |
+| `validateTransition(key, allowed)`                       | `transition`          | `can't change from active to draft` |
+| `check(key, (cs) => msg \| null, code?)`                 | your code (`invalid`) | yours                               |
+
+## Notes
+
+- **Custom messages:** each validator except the two custom ones takes `{ message }`.
+- **`validateRequired`** checks the value the row will have, whether it changed or not.
+- **`validateLength`** counts characters, not UTF-16 units, and also works on arrays.
+- **`validateFormat`, `validateLength` and `validateNumber`** skip null, which is `validateRequired`'s job.
+- **`addError(key, message, code?)`** adds an error directly. `key` is a column, `base`, or a path such as
+  `address.city`.
+
+## State machines with `validateTransition`
+
+`validateTransition` takes a map of `{ from: [to, ...] }`. On an update, a change the stored state can't reach is
+an error. On an insert, the row may start in any state the map has a key for. A state the column's type doesn't
+have is a compile error.
+
+```ts
+const STATUS_FLOW = { draft: ['active', 'archived'], active: ['archived'], archived: ['active'] } as const;
+
+const status = (row: Project, attrs: unknown) =>
+  Changeset.of(row)
+    .cast(attrs, projectFields, ['status'])
+    .validateRequired(['status'])
+    .validateTransition('status', STATUS_FLOW);
+```
+
+## Whole-changeset rules with `check`
+
+`check` is a rule over the whole changeset, changed or not: a rule across columns, or a delete's restriction.
+
+```ts
+const remove = (row: Project) =>
+  Changeset.of(row).check('base', ({ data }) => (data?.status === 'archived' ? null : 'archive the project first'), 'restrict');
+```

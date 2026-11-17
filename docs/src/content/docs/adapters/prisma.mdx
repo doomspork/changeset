@@ -1,0 +1,44 @@
+---
+title: Prisma
+description: The Prisma adapter — types read from the generated delegate, and constraint errors normalized across Prisma 6 and 7.
+---
+
+```ts
+import { prismaAdapter } from 'changeset/prisma';
+
+prismaAdapter(prisma.project)   // or tx.project
+```
+
+- **Types:** the row, `where`, create and update types are read from the generated delegate, with no type
+  arguments. `PrismaRow<typeof prisma.project>` names the row type.
+- **`where`:** a unique `where`, which may carry filters on other columns (`{ id, accountId }`). A row the extra
+  filter excludes reads as missing.
+- **No Prisma import:** the adapter imports nothing from Prisma.
+- **Tested setups:** Prisma 6.19 and 7.10, with both the `prisma-client-js` and `prisma-client` generators, with and
+  without a driver adapter.
+
+## Constraint errors across versions
+
+Prisma reports constraint failures differently depending on version and engine. The adapter normalizes all of them.
+What each setup reports, verified against Postgres:
+
+| Failure     | Prisma 6 (query engine; also with a driver adapter)  | Prisma 7 (driver adapter)                                        |
+| ----------- | ---------------------------------------------------- | ---------------------------------------------------------------- |
+| unique      | `P2002`, `meta.target`: database column names        | `P2002`, `meta.driverAdapterError.cause.constraint.index`: name  |
+| foreign key | `P2003`, `meta.constraint`: name                     | `P2003`, `cause.constraint.index`: name                          |
+| check       | `PrismaClientUnknownRequestError`; name only in the message | `P2039`, `cause.originalCode` `23514`; name in `originalMessage` |
+| not found   | `P2025` (the adapter returns null)                   | `P2025` (the adapter returns null)                               |
+
+`prismaAdapter` reads the model's table and column names from the client's runtime model, through the delegate's
+`$name` and `$parent`. With them it:
+
+- maps database columns to field names (`account_id` → `accountId`);
+- derives columns from a constraint's default name (`projects_account_id_slug_key` → `['accountId', 'slug']`).
+
+So a declaration by columns works on both versions. A constraint with a custom name (`@@unique(..., map: "...")`)
+has no derivable columns: declare it by name. If a client doesn't expose its runtime model, pass
+`prismaAdapter(delegate, { model })`. `prismaViolation(error, model?)` is the same normalization on its own.
+
+## Json columns
+
+Prisma rejects a plain `null` for a `Json` column. Set `Prisma.JsonNull` or `Prisma.DbNull` explicitly.

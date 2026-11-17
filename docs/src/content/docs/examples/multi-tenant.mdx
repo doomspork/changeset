@@ -1,0 +1,48 @@
+---
+title: 'Example: multi-tenant app'
+description: Tenancy, permissions, protected columns, optimistic locking, state transitions and audit logging from repo options.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import { examples } from '../../../lib/examples';
+
+Every row belongs to an account, the session says which account and user are acting, writes need a permission, and
+every write leaves an audit entry. None of this is in the library: it's expressed through the repo's `find`,
+`stamp`, `authorize`, `protect`, `lock` and `afterWrite` options.
+
+It's [`examples/multi-tenant.ts`](https://github.com/doomspork/changeset/blob/main/examples/multi-tenant.ts) in the
+repository, with end-to-end tests against Postgres; imports are shown as an app would write them.
+
+<Code code={examples.multiTenant} lang="ts" title="multi-tenant.ts" />
+
+## How each rule is enforced
+
+| Rule | Mechanism |
+| ---- | --------- |
+| Users only see their account's projects | `find` adds `accountId` to every `where`, so another account's row reads as missing |
+| Writes need a permission | `authorize` throws `ForbiddenError` before anything is read |
+| New rows belong to the acting user | `stamp.insert` sets `accountId` and `ownerId` from the session |
+| Identity, tenant and timestamps can't be edited | `protect` throws on any change to them; `AppFields` makes a schema for one a compile error |
+| Concurrent edits don't clobber each other | `lock: ['updatedAt']` turns a lost race into a `stale` error |
+| Status follows a state machine | `validateTransition('status', STATUS_FLOW)` |
+| Only archived projects can be deleted | `check('base', ...)` on the `remove` changeset |
+| Every write is audited | `afterWrite` inserts an `auditEntry` on the same context — and in the same transaction, if any |
+
+## Using it
+
+```ts
+const ctx = { db: prisma, session };
+
+const created = await createProject({ name: 'Apollo', slug: 'apollo' }, ctx);
+await updateProject(id, 'rename', { name: 'Apollo 11' }, ctx);
+await updateProject(id, 'status', { status: 'active' }, ctx);
+await archiveProject(id, ctx);
+await deleteProject(id, ctx);
+
+// Atomic: an audit entry and both writes commit together, or not at all.
+await prisma.$transaction(async (tx) => {
+  const ctx = { db: tx, session };
+  unwrap(await createProject(attrs, ctx));
+  unwrap(await createProject(otherAttrs, ctx));
+});
+```

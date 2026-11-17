@@ -1,0 +1,31 @@
+---
+title: 'Example: quick start'
+description: Plain Prisma, no tenancy — named changesets for a project and a repo that writes them.
+---
+
+import { Code } from '@astrojs/starlight/components';
+import { examples } from '../../../lib/examples';
+
+The smallest useful setup: field schemas, two named changesets (`create` and `edit`), and a repo. It's
+[`examples/quick-start.ts`](https://github.com/doomspork/changeset/blob/main/examples/quick-start.ts) in the
+repository, with end-to-end tests against Postgres; imports are shown as an app would write them.
+
+<Code code={examples.quickStart} lang="ts" title="quick-start.ts" />
+
+## Using it
+
+```ts
+const result = await createProject(prisma, req.body, { accountId, ownerId });
+if (!result.ok) return res.status(422).json(result.changeset.errors);
+// { slug: [{ message: 'has already been taken', code: 'unique' }] }
+
+const project = await editProject(prisma, id, req.body); // throws ChangesetError when invalid
+```
+
+What to notice:
+
+- `create` permits `name`, `slug` and `description` from the request; `accountId` and `ownerId` come from the
+  caller via `change`, so a request can't set them.
+- Both changesets declare the `(accountId, slug)` unique constraint, so a taken slug is a field error rather than a
+  `P2002` exception.
+- An edit that submits the stored values changes nothing, and the repo skips the write.
